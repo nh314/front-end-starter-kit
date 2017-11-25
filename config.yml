@@ -1,0 +1,18 @@
+PORT: 3000
+COMPATIBILITY:
+    - "last 2 versions"
+    - "ie >= 9"
+    - "ios >= 7"
+PATHS:
+    html:
+        - "src/html/**/*.{hbs,html}"        
+    pages:
+        - "src/html/pages/**/*.{hbs,html}"        
+    scss:
+        - "src/assets/scss/**/*.scss"
+    js:
+        - "src/assets/js/**/*.js"    
+    assets: # other asset paths
+        - "src/assets/**/*.*"
+        - '!src/assets/{js,scss}'
+        - '!src/assets/{js,scss}/**/*'      
