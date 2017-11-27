@@ -10,7 +10,7 @@ PATHS:
     pages:
         - "src/html/pages/**/*.{hbs,html}"        
     scss:
-        - "src/assets/scss/**/*.scss"
+        - "src/assets/scss/"
     js:
         - "src/assets/js/**/*.js"    
     assets: # other asset paths
