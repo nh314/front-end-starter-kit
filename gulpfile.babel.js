@@ -6,9 +6,8 @@ import panini from 'panini';
 import yargs from 'yargs';
 import fs from 'fs';
 import yaml from 'js-yaml';
-import browserSync from 'browser-sync';
-import runseq from 'run-sequence';
-import del from 'del';
+import browser from 'browser-sync';
+import rimraf from 'rimraf';
 
 const $ = plugins();
 const isProduction = !!(yargs.argv.production);
@@ -24,29 +23,24 @@ function loadConfig() {
     return yaml.load(ymlFile);
 }
 
-gulp.task('browser-sync', ['build'], function() {
-
-    browserSync.init({
+function server(done) {
+  browser.init({
         server: {
             baseDir: "./dist"
         },
         port: PORT,
         open: false
-    });
+    });  
+  
+  done();
+}
 
-});
+function clean(done) {
+  rimraf(PATHS.dist, done);
+}
 
-gulp.task('build', ['clean'], function(done) {
-    runseq('copy', ['html', 'scss', 'js'], done);
-});
-
-gulp.task('copy', function() {
-  return gulp.src(PATHS.assets).pipe(gulp.dest('dist/assets'));
-});
-
-gulp.task('html', function() {  
-  panini.refresh();
-  gulp.src('src/html/pages/**/*.html')
+function html() {
+  return gulp.src('src/html/pages/**/*.html')
     .pipe(panini({
       root: 'src/html/pages/',
       layouts: 'src/html/layouts/',
@@ -54,42 +48,11 @@ gulp.task('html', function() {
       helpers: 'src/html/helpers/',
       data: 'src/html/data/'
     }))
-    .pipe(gulp.dest('dist'))
-    .pipe(browserSync.stream());
-});
+    .pipe(gulp.dest(PATHS.dist));
+}
 
-gulp.task('lint', function() {
-   return gulp.src(PATHS.js)
-        .pipe($.eslint())
-        .pipe($.eslint.format())
-        .pipe($.eslint.failAfterError());
-});
-
-gulp.task('js', ['lint'], function() {
-  var uglify = $.uglify().on('error', $.notify.onError({
-      message: "<%= error.message %>",
-      title: "Uglify JS Error"
-    }));
-
-  return gulp.src(PATHS.js)
-    .pipe($.sourcemaps.init())
-    .pipe($.babel())
-    .pipe($.concat('app.js', {
-      newLine:'\n;'
-    }))
-    .pipe($.if(isProduction, uglify))
-    .pipe($.if(!isProduction, $.sourcemaps.write()))
-    .pipe(gulp.dest('dist/assets/js'))
-    .pipe(browserSync.stream());
-});
-gulp.task('clean:js', function() {
-  return del([
-      'dist/assets/js/app.js',
-    ]);
-});
-
-gulp.task('scss', function() {
-  return gulp.src('src/assets/scss/app.scss')
+function scss() {
+   return gulp.src('src/assets/scss/app.scss')
     .pipe($.sourcemaps.init())
     .pipe($.sass({
       includePaths: PATHS.scss
@@ -107,44 +70,48 @@ gulp.task('scss', function() {
     })))
     .pipe($.if(!isProduction, $.sourcemaps.write('.')))
     .pipe(gulp.dest('dist/assets/css'))
-    .pipe(browserSync.stream());    
-});
-gulp.task('clean:css', function() {
-  return del([
-      'dist/assets/css/app.css',
-      'dist/assets/css/app.css.map',
-    ]);
-});
+    .pipe(browser.stream()); 
+}
 
-gulp.task('clean', function(done) {
-  runseq(['clean:js', 'clean:css'], done);
-});
+function js() {
+  let uglify = $.uglify().on('error', $.notify.onError({
+      message: "<%= error.message %>",
+      title: "Uglify JS Error"
+    }));
 
+  return gulp.src(PATHS.js)
+    .pipe($.eslint())
+    .pipe($.eslint.format())
+    .pipe($.eslint.failAfterError())
+    .pipe($.sourcemaps.init())
+    .pipe($.babel())
+    .pipe($.concat('app.js', {
+      newLine:'\n;'
+    }))
+    .pipe($.if(isProduction, uglify))
+    .pipe($.if(!isProduction, $.sourcemaps.write()))
+    .pipe(gulp.dest('dist/assets/js'))
+    .pipe(browser.stream());
 
-gulp.task('default', ['build', 'browser-sync'], function() {
-  // Log file changes to console
-  function logFileChange(event) {
-    var fileName = require('path').relative(__dirname, event.path);
-    console.log('[' + 'WATCH'.green + '] ' + fileName.magenta + ' was ' + event.type + ', running tasks...');
-  }
+}
 
-  // SCSS Watch
-  gulp.watch(['src/assets/scss/**/*.scss'], ['clean:css', 'scss'])
-    .on('change', function(event) {
-      logFileChange(event);
-    });
+function copy() {
+  return gulp.src(PATHS.assets).pipe(gulp.dest('dist/assets'));
+}
 
-  // JS Watch
-  gulp.watch(['assets/js/**/*.js'], ['clean:js', 'js'])
-    .on('change', function(event) {
-      logFileChange(event);
-    });
+function resetPages(done) {
+  panini.refresh();
+  done();
+}
 
-  // HTML Watch
-    gulp.watch(PATHS.html, ['html']).on('change', function(event) {
-        logFileChange(event);
-        browserSync.reload;
-    });
-  
-    gulp.watch(PATHS.assets, ['copy']);  
-});
+function watch() {
+  gulp.watch(PATHS.assets, copy);
+  gulp.watch('src/html/pages/**/*.html').on('all', gulp.series(html, browser.reload));
+  gulp.watch('src/html/{layouts,partials}/**/*.html').on('all', gulp.series(resetPages, html, browser.reload));
+  gulp.watch('src/assets/scss/**/*.scss').on('all', scss);
+  gulp.watch('src/assets/js/**/*.js').on('all', gulp.series(js, browser.reload));  
+}
+
+gulp.task('build', gulp.series(clean, gulp.parallel(html, scss, js, copy) ));
+
+gulp.task('default',  gulp.series('build', server, watch));
